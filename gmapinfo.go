@@ -13,20 +13,20 @@ func main() {
     imagefile := os.Args[1]
     fmt.Printf("Image file: %s\n", imagefile)
 
-    dev, err := disk.OpenImageFile(imagefile)
+    imgfile, err := disk.OpenImageFile(imagefile)
     if err != nil {
         panic(err)
     }
-    defer dev.Close()
+    defer imgfile.Close()
 
-    bootsector, err := loadBootSector(dev)
+    bootsector, err := loadBootSector(imgfile)
     if err != nil {
         panic(err)
     }
     fmt.Println(hex.Dump(bootsector[:]))
 }
 
-func loadBootSector(dev disk.BlockDevice) (*disk.Block, error) {
+func loadBootSector(dev disk.BlockReader) (*disk.Block, error) {
     bootsector, err := dev.ReadBlock(0)
     if err != nil {
         return nil, err
