@@ -26,8 +26,8 @@ func main() {
     fmt.Println(hex.Dump(bootsector[:]))
 }
 
-func loadBootSector(dev disk.BlockDevice) (*disk.Sector, error) {
-    bootsector, err := dev.ReadSector(0)
+func loadBootSector(dev disk.BlockDevice) (*disk.Block, error) {
+    bootsector, err := dev.ReadBlock(0)
     if err != nil {
         return nil, err
     }

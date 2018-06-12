@@ -1,9 +1,9 @@
 package disk
 
-const SectorSize = 512
+const BlockSize = 512
 
-type Sector [SectorSize]byte
+type Block [BlockSize]byte
 
 type BlockDevice interface {
-    ReadSector(n int64) (*Sector, error)
+    ReadBlock(n int64) (*Block, error)
 }
