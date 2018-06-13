@@ -5,6 +5,7 @@ import (
     "os"
     "encoding/hex"
     "disk"
+    "img"
 )
 
 func main() {
@@ -19,24 +20,15 @@ func main() {
     }
     defer imgfile.Close()
 
-    bootsector, err := loadBootSector(imgfile)
+    hdrblock, err := imgfile.ReadBlock(0)
     if err != nil {
         panic(err)
     }
-    fmt.Println(hex.Dump(bootsector[:]))
-}
 
-func loadBootSector(dev disk.BlockReader) (*disk.Block, error) {
-    bootsector, err := dev.ReadBlock(0)
+    fmt.Println(hex.Dump(hdrblock[:]))
+    hdr, err := img.DecodeHeader(hdrblock[:])
     if err != nil {
-        return nil, err
+        panic(err)
     }
-
-    var bootsignature uint16
-    bootsignature = uint16(bootsector[510]) | (uint16(bootsector[511]) << 8)
-    if bootsignature != 0xAA55 {
-        return nil, fmt.Errorf("invalid boot sector (boot signature = 0x%04X)", bootsignature)
-    }
-
-    return bootsector, nil
+    fmt.Printf("header = %v\n", hdr)
 }
