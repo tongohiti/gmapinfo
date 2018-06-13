@@ -1,5 +1,7 @@
 package img
 
+import "fmt"
+
 type Date struct {
     Month, Year int
 }
@@ -7,6 +9,14 @@ type Date struct {
 type Timestamp struct {
     Year, Month, Day int
     HH, MM, SS       int
+}
+
+func (d Date) String() string {
+    return fmt.Sprintf("%04d/%02d", d.Year, d.Month)
+}
+
+func (t Timestamp) String() string {
+    return fmt.Sprintf("%04d-%02d-%02d %02d:%02d:%02d", t.Year, t.Month, t.Day, t.HH, t.MM, t.SS)
 }
 
 func convertDate(rawyear, rawmonth uint8) Date {

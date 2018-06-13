@@ -7,14 +7,11 @@ import (
 )
 
 type Header struct {
+    MapName        string
     MapVersion     Version
-    ExpiryDate     Date
+    MapDate        Date
     CreateDate     Timestamp
     PartitionTable [4]Partition
-}
-
-type Version struct {
-    Maj, Min uint8
 }
 
 type Partition struct {
@@ -105,8 +102,9 @@ func DecodeHeader(hdrbytes []byte) (*Header, error) {
 
     var header Header
 
+    header.MapName = convertMapName(&rawhdr.MapDescr1, &rawhdr.MapDescr2)
     header.MapVersion = Version{rawhdr.VersionMaj, rawhdr.VersionMin}
-    header.ExpiryDate = convertDate(rawhdr.ExpiryYear, rawhdr.ExpiryMonth)
+    header.MapDate = convertDate(rawhdr.ExpiryYear, rawhdr.ExpiryMonth)
     header.CreateDate = convertTimestamp(rawhdr.CreateYear, rawhdr.CreateMonth, rawhdr.CreateDay, rawhdr.CreateHour, rawhdr.CreateMinute, rawhdr.CreateSecond)
 
     geometry := CHS{C: rawhdr.NumCylinders, H: rawhdr.NumHeads, S: rawhdr.NumSectors}
@@ -115,6 +113,14 @@ func DecodeHeader(hdrbytes []byte) (*Header, error) {
     }
 
     return &header, nil
+}
+
+func convertMapName(part1 *[20]byte, part2 *[30]byte) string {
+    name := make([]byte, 0, 50)
+    name = append(name, part1[:]...)
+    name = append(name, part2[:]...)
+    name = bytes.TrimRight(name, " ")
+    return string(name)
 }
 
 func convertPartitionDescr(rp rawPartition, diskgeom CHS) Partition {
