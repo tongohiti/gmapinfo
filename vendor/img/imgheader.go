@@ -27,6 +27,7 @@ type Timestamp struct {
 }
 
 type Partition struct {
+    Empty                   bool
     StartCHS, EndCHS        CHS
     StartLBA, EndLBA        uint32
     StartSector, NumSectors uint32
@@ -82,10 +83,6 @@ type rawPartition struct {
     NumSectors uint32
 }
 
-type CHS struct {
-    C, H, S uint16
-}
-
 var ErrBadSignature = errors.New("bad file signature")
 
 func DecodeHeader(hdrbytes []byte) (*Header, error) {
@@ -122,7 +119,7 @@ func DecodeHeader(hdrbytes []byte) (*Header, error) {
     header.CreateDate = convertTimestamp(rawhdr.CreateYear, rawhdr.CreateMonth, rawhdr.CreateDay, rawhdr.CreateHour, rawhdr.CreateMinute, rawhdr.CreateSecond)
 
     for i := range header.PartitionTable {
-        header.PartitionTable[i] = convertPartitionDescr(rawhdr.PartitionTable[i], uint32(rawhdr.Sectors), uint32(rawhdr.Heads))
+        header.PartitionTable[i] = convertPartitionDescr(rawhdr.PartitionTable[i], rawhdr.Sectors, rawhdr.Heads)
     }
 
     return &header, nil
@@ -150,29 +147,17 @@ func convertTimestamp(rawyear uint16, rawmonth, rawday uint8, rawhour, rawminute
     return t
 }
 
-func convertPartitionDescr(rp rawPartition, sectors, heads uint32) Partition {
+func convertPartitionDescr(rp rawPartition, sectors, heads uint16) Partition {
+    geometry := CHS{C: 0, H: heads, S: sectors}
     var part Partition
-    part.StartCHS = convertCHS(rp.StartCHS)
-    part.EndCHS = convertCHS(rp.EndCHS)
-    part.StartLBA = chs2lba(part.StartCHS, heads, sectors)
-    part.EndLBA = chs2lba(part.EndCHS, heads, sectors)
+    part.StartCHS = decodeCHS(rp.StartCHS)
+    part.EndCHS = decodeCHS(rp.EndCHS)
     part.StartSector = rp.StartLBA
     part.NumSectors = rp.NumSectors
+    part.Empty = part.StartCHS.isZero() && part.EndCHS.isZero()
+    if !part.Empty {
+        part.StartLBA = part.StartCHS.toLBA(geometry)
+        part.EndLBA = part.EndCHS.toLBA(geometry)
+    }
     return part
-}
-
-func convertCHS(rawchs [3]byte) CHS {
-    var res CHS
-    res.H = uint16(rawchs[0])
-    res.S = uint16(rawchs[1] & 0x3F)
-    res.C = uint16(rawchs[2]) | (uint16(rawchs[1]&0xC0) << 2)
-    return res
-}
-
-// LBA = (C × HPC + H) × SPT + (S - 1)
-func chs2lba(addr CHS, hpc uint32, spt uint32) uint32 {
-    c := uint32(addr.C)
-    h := uint32(addr.H)
-    s := uint32(addr.S)
-    return (c*hpc+h)*spt + (s - 1)
 }
