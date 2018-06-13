@@ -38,7 +38,7 @@ type rawHeader struct {
     BlockSize      uint16          // 0x016
     NumSectors     uint16          // 0x018
     NumHeads       uint16          // 0x01A
-    Cylinders      uint16          // 0x01C
+    NumCylinders   uint16          // 0x01C
     _              uint16          // 0x01E
     Unknown1       [25]uint8       // 0x020
     CreateYear     uint16          // 0x039 (unaligned!)
@@ -109,15 +109,15 @@ func DecodeHeader(hdrbytes []byte) (*Header, error) {
     header.ExpiryDate = convertDate(rawhdr.ExpiryYear, rawhdr.ExpiryMonth)
     header.CreateDate = convertTimestamp(rawhdr.CreateYear, rawhdr.CreateMonth, rawhdr.CreateDay, rawhdr.CreateHour, rawhdr.CreateMinute, rawhdr.CreateSecond)
 
+    geometry := CHS{C: rawhdr.NumCylinders, H: rawhdr.NumHeads, S: rawhdr.NumSectors}
     for i := range header.PartitionTable {
-        header.PartitionTable[i] = convertPartitionDescr(rawhdr.PartitionTable[i], rawhdr.Sectors, rawhdr.Heads)
+        header.PartitionTable[i] = convertPartitionDescr(rawhdr.PartitionTable[i], geometry)
     }
 
     return &header, nil
 }
 
-func convertPartitionDescr(rp rawPartition, sectors, heads uint16) Partition {
-    geometry := CHS{C: 0, H: heads, S: sectors}
+func convertPartitionDescr(rp rawPartition, diskgeom CHS) Partition {
     var part Partition
     part.StartCHS = decodeCHS(rp.StartCHS)
     part.EndCHS = decodeCHS(rp.EndCHS)
@@ -125,8 +125,8 @@ func convertPartitionDescr(rp rawPartition, sectors, heads uint16) Partition {
     part.NumSectors = rp.NumSectors
     part.Empty = part.StartCHS.isZero() && part.EndCHS.isZero()
     if !part.Empty {
-        part.StartLBA = part.StartCHS.toLBA(geometry)
-        part.EndLBA = part.EndCHS.toLBA(geometry)
+        part.StartLBA = part.StartCHS.toLBA(diskgeom)
+        part.EndLBA = part.EndCHS.toLBA(diskgeom)
     }
     return part
 }
