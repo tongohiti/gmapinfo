@@ -19,6 +19,7 @@ func main() {
     }
     defer imgfile.Close()
 
+    // Read image header
     hdrblock, err := imgfile.ReadBlock(0)
     if err != nil {
         panic(err)
@@ -58,5 +59,67 @@ func main() {
     }
     if xclusters != 0 {
         fmt.Println("!! Non-whole number of clusters - bad image file?")
+    }
+
+    // Read zero pages between header and file table
+    nonzero := false
+    for i := int64(1); i < int64(hdr.FileTableBlock); i++ {
+        zeroes, err := imgfile.ReadBlock(i)
+        if err != nil {
+            panic(err)
+        }
+        for _, z := range zeroes {
+            if z != 0 {
+                nonzero = true
+                break
+            }
+        }
+        if nonzero {
+            break
+        }
+    }
+    if nonzero {
+        fmt.Println("!! Non-zero data between image header and FAT - bad image file?")
+    }
+
+    // Read first (fake) file entry
+    firstentryblk, err := imgfile.ReadBlock(int64(hdr.FileTableBlock))
+    if err != nil {
+        panic(err)
+    }
+
+    firstentry, err := img.DecodeFileEntry(firstentryblk[:])
+    if err != nil {
+        panic(err)
+    }
+
+    fmt.Printf("Entry0:      %v\n", *firstentry)
+    if firstentry.Size%hdr.BlockSize != 0 {
+        fmt.Println("!! Non-whole number of blocks in first entry - bad image file?")
+    }
+    if firstentry.Size < hdr.FileTableBlock*hdr.BlockSize {
+        fmt.Println("!! Too small data size in first entry - bad image file?")
+    }
+    fatblocks := firstentry.Size/hdr.BlockSize - hdr.FileTableBlock
+    fmt.Printf("Num entries: %d (0x%[1]X)\n", fatblocks)
+    fmt.Printf("Data start:  0x%X\n", firstentry.Size)
+
+    // Read whole file table
+    for i := uint32(1); i < fatblocks; i++ {
+        entryblk, err := imgfile.ReadBlock(int64(hdr.FileTableBlock + i))
+        if err != nil {
+            panic(err)
+        }
+
+        entry, err := img.DecodeFileEntry(entryblk[:])
+        if err != nil {
+            panic(err)
+        }
+
+        fmt.Printf("Entry[%04d]: %v\n", i, *entry)
+
+        if entry.Part == 0xFF {
+            fmt.Println("!! File split into 256 or more parts - support not implemented")
+        }
     }
 }
