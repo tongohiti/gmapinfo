@@ -12,6 +12,11 @@ type Header struct {
     MapDate        Date
     CreateDate     Timestamp
     PartitionTable [4]Partition
+    FileTableBlock uint32 // File table start block
+    BlockSize      uint32 // Block size in bytes
+    ClusterBlocks  uint32 // Cluster size in blocks
+    ClusterSize    uint32 // Cluster size in bytes
+    NumClusters    uint32 // Sometimes corresponds to partition size, sometimes not
 }
 
 type Partition struct {
@@ -71,7 +76,10 @@ type rawPartition struct {
     NumSectors uint32
 }
 
-var ErrBadSignature = errors.New("bad file signature")
+var (
+    ErrBadSignature   = errors.New("bad file signature")
+    BlockSizeMismatch = errors.New("block size mismatch")
+)
 
 func DecodeHeader(hdrbytes []byte) (*Header, error) {
     var rawhdr rawHeader
@@ -111,6 +119,16 @@ func DecodeHeader(hdrbytes []byte) (*Header, error) {
     for i := range header.PartitionTable {
         header.PartitionTable[i] = convertPartitionDescr(rawhdr.PartitionTable[i], geometry)
     }
+
+    if rawhdr.BlockSize != (1 << rawhdr.Exp1) {
+        return nil, BlockSizeMismatch
+    }
+
+    header.FileTableBlock = uint32(rawhdr.FileTableBlock)
+    header.BlockSize = uint32(rawhdr.BlockSize)
+    header.ClusterBlocks = 1 << rawhdr.Exp2
+    header.ClusterSize = 1 << (rawhdr.Exp1 + rawhdr.Exp2)
+    header.NumClusters = uint32(rawhdr.NumClusters)
 
     return &header, nil
 }
