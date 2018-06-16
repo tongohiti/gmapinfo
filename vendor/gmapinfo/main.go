@@ -7,7 +7,10 @@ import (
 )
 
 type Params struct {
-    FileName string
+    FileName   string
+    Extract    bool
+    ZipOutput  bool
+    OutputName string
 }
 
 func Run(params Params) error {
@@ -121,6 +124,17 @@ func Run(params Params) error {
     for i := range files {
         entry := &files[i]
         fmt.Printf("Entry[%04d]: %v\n", i, *entry)
+    }
+
+    if params.Extract {
+        if hdr.BlockSize != disk.BlockSize {
+            return fmt.Errorf("unsupported block size: %d", hdr.BlockSize)
+        }
+
+        err := extractFiles(imgfile, hdr.ClusterBlocks, files, params.OutputName, params.ZipOutput)
+        if err != nil {
+            return err
+        }
     }
 
     return nil
