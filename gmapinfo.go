@@ -116,10 +116,6 @@ func main() {
             panic(err)
         }
 
-        fmt.Printf("Entry[%04d]: %v\n", i, *entry)
-
-        if entry.Part == 0xFF {
-            fmt.Println("!! File split into 256 or more parts - support not implemented")
-        }
+        fmt.Printf("Entry[%04d]: %v\n", i, entry)
     }
 }
