@@ -18,8 +18,8 @@ func (f *ImageFile) Close() {
     f.blocks = 0
 }
 
-func (f *ImageFile) ReadBlock(n int64) (*Block, error) {
-    _, e := f.file.Seek(n*BlockSize, io.SeekStart)
+func (f *ImageFile) ReadBlock(index int64) (*Block, error) {
+    _, e := f.file.Seek(index*BlockSize, io.SeekStart)
     if e != nil {
         return nil, e
     }
@@ -33,20 +33,48 @@ func (f *ImageFile) ReadBlock(n int64) (*Block, error) {
         return nil, fmt.Errorf("short read: %d/%d", r, BlockSize)
     }
 
-    if n == 0 {
+    if index == 0 {
         f.xorbyte = block[0]
     }
 
     if f.xorbyte != 0 {
-        xor(&block, f.xorbyte)
+        xor(block[:], f.xorbyte)
     }
 
     return &block, nil
 }
 
-func xor(block *Block, xorbyte byte) {
-    for i := range block {
-        block[i] ^= xorbyte
+func (f *ImageFile) ReadBlocks(index, count int64) ([]byte, error) {
+    _, e := f.file.Seek(index*BlockSize, io.SeekStart)
+    if e != nil {
+        return nil, e
+    }
+
+    size := count * BlockSize
+    data := make([]byte, size)
+
+    r, e := io.ReadFull(f.file, data)
+    if e != nil {
+        return nil, e
+    }
+    if int64(r) != size {
+        return nil, fmt.Errorf("short read: %d/%d", r, size)
+    }
+
+    if index == 0 {
+        f.xorbyte = data[0]
+    }
+
+    if f.xorbyte != 0 {
+        xor(data, f.xorbyte)
+    }
+
+    return data, nil
+}
+
+func xor(data []byte, xorbyte byte) {
+    for i := range data {
+        data[i] ^= xorbyte
     }
 }
 
