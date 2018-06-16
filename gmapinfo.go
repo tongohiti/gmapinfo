@@ -105,17 +105,20 @@ func main() {
     fmt.Printf("Data start:  0x%X\n", firstentry.Size)
 
     // Read whole file table
-    for i := uint32(1); i < fatblocks; i++ {
-        entryblk, err := imgfile.ReadBlock(int64(hdr.FileTableBlock + i))
-        if err != nil {
-            panic(err)
-        }
+    filetable, err := imgfile.ReadBlocks(int64(hdr.FileTableBlock)+1, int64(fatblocks)-1)
+    if err != nil {
+        panic(err)
+    }
 
-        entry, err := img.DecodeFileEntry(entryblk[:])
-        if err != nil {
-            panic(err)
-        }
+    files, err := img.DecodeFileTable(filetable)
+    if err != nil {
+        panic(err)
+    }
 
-        fmt.Printf("Entry[%04d]: %v\n", i, entry)
+    fmt.Printf("Num files:   %d (0x%[1]X)\n", len(files))
+
+    for i := range files {
+        entry := &files[i]
+        fmt.Printf("Entry[%04d]: %v\n", i, *entry)
     }
 }

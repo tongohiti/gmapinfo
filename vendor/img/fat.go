@@ -27,7 +27,8 @@ type rawFileEntry struct {
 var (
     ErrUnknownFlagValue = errors.New("unknown file entry flag")
     ErrUnsupportedSplit = errors.New("not implemented: file split into 256 or more parts")
-    ErrBrokenFAT = errors.New("broken FAT")
+    ErrBrokenFAT        = errors.New("broken FAT")
+    ErrBrokenFileTable  = errors.New("broken file table")
 )
 
 func DecodeFileEntry(rawbytes []byte) (*FileEntry, error) {
@@ -61,6 +62,71 @@ func DecodeFileEntry(rawbytes []byte) (*FileEntry, error) {
     entry.FAT = fat
 
     return &entry, nil
+}
+
+func DecodeFileTable(rawbytes []byte) ([]FileEntry, error) {
+    const EntrySize = 512
+    if len(rawbytes)%EntrySize != 0 {
+        return nil, ErrBrokenFileTable
+    }
+    n := len(rawbytes) / EntrySize
+
+    res := make([]FileEntry, 0, n)
+
+    var (
+        rawentry  rawFileEntry
+        preventry rawFileEntry
+        entry     *FileEntry
+    )
+
+    r := bytes.NewReader(rawbytes)
+    for i := 0; i < n; i++ {
+        e := binary.Read(r, binary.LittleEndian, &rawentry)
+        if e != nil {
+            return nil, e
+        }
+
+        if rawentry.Flag == 0 {
+            continue
+        } else if rawentry.Flag != 1 {
+            return nil, ErrUnknownFlagValue
+        }
+
+        if rawentry.Part == 0xFF { // part index may be larger than 8 bits
+            return nil, ErrUnsupportedSplit
+        }
+
+        isnew := rawentry.Part == 0
+        if i == 0 && !isnew {
+            return nil, ErrBrokenFileTable
+        }
+
+        fat, ok := decodeFAT(rawentry.FAT)
+        if !ok {
+            return nil, ErrBrokenFAT
+        }
+
+        if isnew {
+            n := len(res)
+            res = res[:n+1]
+            entry = &res[n]
+        }
+
+        if isnew {
+            entry.Name = constructFileName(rawentry.Name[:], rawentry.Ext[:])
+            entry.Size = rawentry.Size
+            entry.FAT = fat
+        } else {
+            if rawentry.Name != preventry.Name || rawentry.Ext != preventry.Ext || rawentry.Size != 0 {
+                return nil, ErrBrokenFileTable
+            }
+            entry.FAT = append(entry.FAT, fat...)
+        }
+
+        preventry = rawentry
+    }
+
+    return res, nil
 }
 
 func constructFileName(name, ext []byte) string {
