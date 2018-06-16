@@ -70,3 +70,7 @@ func OpenImageFile(filename string) (*ImageFile, error) {
 
     return &ImageFile{f, nblocks, 0}, nil
 }
+
+func (f *ImageFile) SizeBytes() int64 {
+    return f.blocks * BlockSize
+}
