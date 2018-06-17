@@ -17,7 +17,7 @@ type SubfileHeader struct {
 type rawSubfileHeader struct {
     HeaderSize   uint16   // 0x00
     FormatID     [10]byte // 0x02
-    Unknown      byte     // 0x0C
+    _            byte     // 0x0C
     Flag         byte     // 0x0D
     CreateYear   uint16   // 0x0E
     CreateMonth  uint8    // 0x10
