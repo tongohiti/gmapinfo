@@ -124,6 +124,10 @@ func Run(params Params) error {
     for i := range files {
         entry := &files[i]
         fmt.Printf("Entry[%04d]: %v\n", i, *entry)
+        err := describeSubfile(imgfile, entry, hdr.ClusterBlocks)
+        if err != nil {
+            return err
+        }
     }
 
     if params.Extract {
@@ -136,6 +140,27 @@ func Run(params Params) error {
             return err
         }
     }
+
+    return nil
+}
+
+func describeSubfile(imgfile disk.BlockReader, entry *img.FileEntry, clusterblocks uint32) error {
+    firstblock := int64(entry.FAT[0]) * int64(clusterblocks)
+    data, err := imgfile.ReadBlock(firstblock)
+    if err != nil {
+        return err
+    }
+
+    hdr, err := img.DecodeSubfileCommonHeader(data[:])
+    if err == img.ErrBadSignature {
+        fmt.Println("             Not a GARMIN common format.")
+        return nil
+    }
+    if err != nil {
+        return err
+    }
+
+    fmt.Printf("             %v\n", *hdr)
 
     return nil
 }
