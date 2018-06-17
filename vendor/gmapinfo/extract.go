@@ -5,6 +5,7 @@ import (
     "img"
     "fmt"
     "errors"
+    "io"
     "os"
     "archive/zip"
 )
@@ -41,29 +42,38 @@ func extractFiles(imgfile disk.BlockReader, clusterblocks uint32, files []img.Fi
             os.Stdout.Sync()
         }
 
-        size := int64(entry.Size)
-        nclusters := len(entry.FAT)
-        for i, cluster := range entry.FAT {
-            progressFunc(i, nclusters)
-            data, err := imgfile.ReadBlocks(int64(cluster)*int64(clusterblocks), int64(clusterblocks))
-            if err != nil {
-                return err
-            }
-            if size < clustersize {
-                data = data[:size]
-            }
-            size -= int64(len(data))
-            n, err := ze.Write(data)
-            if err != nil {
-                return err
-            }
-            if n != len(data) {
-                return ErrExtract
-            }
+        err = saveFileRegion(0, int64(entry.Size), entry.FAT, clustersize, int64(clusterblocks), imgfile, ze, progressFunc)
+        if err != nil {
+            return err
         }
 
         fmt.Printf("Writing %s .. OK! \n", name)
     }
 
+    return nil
+}
+
+type progressFunc func(current, total int)
+
+func saveFileRegion(_, size int64, fat []uint16, clustersize, clusterblocks int64, imgfile disk.BlockReader, target io.Writer, progress progressFunc) error {
+    nclusters := len(fat)
+    for i, cluster := range fat {
+        progress(i, nclusters)
+        data, err := imgfile.ReadBlocks(int64(cluster)*int64(clusterblocks), int64(clusterblocks))
+        if err != nil {
+            return err
+        }
+        if size < clustersize {
+            data = data[:size]
+        }
+        size -= int64(len(data))
+        n, err := target.Write(data)
+        if err != nil {
+            return err
+        }
+        if n != len(data) {
+            return ErrExtract
+        }
+    }
     return nil
 }
