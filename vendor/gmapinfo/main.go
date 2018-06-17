@@ -163,12 +163,12 @@ func describeSubfile(imgfile disk.BlockReader, entry *img.FileEntry, clusterbloc
     fmt.Printf("             %v\n", *hdr)
 
     if hdr.Format == "GMP" {
-        gmpdirectory, err := img.DecodeGmpHeader(data[:], entry.Size)
+        gmpdirectory, err := img.ReadGmpDirectory(imgfile, entry, clusterblocks)
         if err != nil {
             return err
         }
         for _, e := range gmpdirectory {
-            fmt.Printf("               > subfile @ 0x%X, %d bytes\n", e.Offset, e.Length)
+            fmt.Printf("               > %s, %d bytes, %v\n", e.Format, e.Length, e.SubfileHeader)
         }
     }
 
