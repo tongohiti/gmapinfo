@@ -49,7 +49,13 @@ func extractFiles(imgfile disk.BlockReader, clusterblocks uint32, files []img.Fi
                 data = data[:size]
             }
             size -= int64(len(data))
-            ze.Write(data)
+            n, err := ze.Write(data)
+            if err != nil {
+                return err
+            }
+            if n != len(data) {
+                return ErrExtract
+            }
         }
 
         fmt.Printf("Writing %s .. OK! \n", name)
