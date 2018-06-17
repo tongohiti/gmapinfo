@@ -169,6 +169,12 @@ func describeSubfile(imgfile disk.BlockReader, entry *img.FileEntry, clusterbloc
         }
         for _, e := range gmpdirectory {
             fmt.Printf("               > %s, %d bytes, %v\n", e.Format, e.Length, e.SubfileHeader)
+            if e.Format == "TRE" {
+                mapId, err := img.ReadTreMapId(e.RawHeader)
+                if err == nil {
+                    fmt.Printf("                 > MapId %d (0x%[1]X)\n", mapId)
+                }
+            }
         }
     }
 

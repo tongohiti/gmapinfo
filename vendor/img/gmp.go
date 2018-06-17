@@ -15,6 +15,7 @@ type GmpSubfile struct {
 type GmpDirectoryEntry struct {
     GmpSubfile
     SubfileHeader
+    RawHeader []byte
 }
 
 func DecodeGmpHeader(hdrbytes []byte, gmpsize uint32) ([]GmpSubfile, error) {
@@ -109,8 +110,14 @@ func ReadGmpDirectory(imgfile disk.BlockReader, gmpentry *FileEntry, clusterbloc
             return nil, err
         }
 
+        hdrlen := subfilehdr.HeaderSize
+        if hdrlen > len(subfiledata) {
+            hdrlen = len(subfiledata)
+        }
+
         res[i].GmpSubfile = subfiles[i]
         res[i].SubfileHeader = *subfilehdr
+        res[i].RawHeader = subfiledata[:hdrlen]
     }
 
     return res, nil
