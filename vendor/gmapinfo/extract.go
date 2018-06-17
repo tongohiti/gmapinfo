@@ -55,23 +55,38 @@ func extractFiles(imgfile disk.BlockReader, clusterblocks uint32, files []img.Fi
 
 type progressFunc func(current, total int)
 
-func saveFileRegion(_, size int64, fat []uint16, clustersize, clusterblocks int64, imgfile disk.BlockReader, target io.Writer, progress progressFunc) error {
-    nclusters := len(fat)
-    for i, cluster := range fat {
+func saveFileRegion(offset, size int64, fat []uint16, clustersize, clusterblocks int64, imgfile disk.BlockReader, target io.Writer, progress progressFunc) error {
+    startcluster := offset / clustersize
+    endcluster := (offset + size) / clustersize
+    fatregion := fat[startcluster : endcluster+1]
+    nclusters := len(fatregion)
+    for i, cluster := range fatregion {
         progress(i, nclusters)
         data, err := imgfile.ReadBlocks(int64(cluster)*int64(clusterblocks), int64(clusterblocks))
         if err != nil {
             return err
         }
-        if size < clustersize {
-            data = data[:size]
+
+        isFirst := i == 0
+        isLast := i == (nclusters - 1)
+        var from, to int64
+        if isFirst {
+            from = offset % clustersize
+        } else {
+            from = 0
         }
-        size -= int64(len(data))
-        n, err := target.Write(data)
+        if isLast {
+            to = (offset + size) % clustersize
+        } else {
+            to = clustersize
+        }
+        fragment := data[from:to]
+
+        n, err := target.Write(fragment)
         if err != nil {
             return err
         }
-        if n != len(data) {
+        if n != len(fragment) {
             return ErrExtract
         }
     }
