@@ -1,6 +1,7 @@
 package img
 
 import (
+    "disk"
     "bytes"
     "encoding/binary"
     "io"
@@ -11,10 +12,18 @@ type GmpSubfile struct {
     Length uint32
 }
 
+type GmpDirectoryEntry struct {
+    GmpSubfile
+    SubfileHeader
+}
+
 func DecodeGmpHeader(hdrbytes []byte, gmpsize uint32) ([]GmpSubfile, error) {
     commhdr, err := DecodeSubfileCommonHeader(hdrbytes)
     if err != nil {
         return nil, err
+    }
+    if commhdr.Format != "GMP" {
+        return nil, ErrBadSignature
     }
 
     rawtable := hdrbytes[:commhdr.HeaderSize]
@@ -55,6 +64,53 @@ func DecodeGmpHeader(hdrbytes []byte, gmpsize uint32) ([]GmpSubfile, error) {
         }
         length := nextOffset - offset
         res[i].Length = length
+    }
+
+    return res, nil
+}
+
+func ReadGmpDirectory(imgfile disk.BlockReader, gmpentry *FileEntry, clusterblocks uint32) ([]GmpDirectoryEntry, error) {
+    gmpsize := gmpentry.Size
+    gmpfat := gmpentry.FAT
+
+    gmpstart := int64(gmpfat[0]) * int64(clusterblocks)
+    gmpfirstblock, err := imgfile.ReadBlock(gmpstart)
+    if err != nil {
+        return nil, err
+    }
+
+    subfiles, err := DecodeGmpHeader(gmpfirstblock[:], gmpsize)
+    if err != nil {
+        return nil, err
+    }
+
+    res := make([]GmpDirectoryEntry, len(subfiles))
+
+    clustersize := int64(clusterblocks) * disk.BlockSize
+    for i := range subfiles {
+        offset := int64(subfiles[i].Offset)
+        startcluster := offset / clustersize
+
+        readstart := int64(gmpfat[startcluster]) * int64(clusterblocks)
+        readblocks := int64(clusterblocks)
+        skip := offset % clustersize
+        if clustersize-skip < SubfileCommonHeaderSize {
+            readblocks++
+        }
+
+        subfiledata, err := imgfile.ReadBlocks(readstart, readblocks)
+        if err != nil {
+            return nil, err
+        }
+        subfiledata = subfiledata[skip:]
+
+        subfilehdr, err := DecodeSubfileCommonHeader(subfiledata)
+        if err != nil {
+            return nil, err
+        }
+
+        res[i].GmpSubfile = subfiles[i]
+        res[i].SubfileHeader = *subfilehdr
     }
 
     return res, nil
