@@ -172,5 +172,12 @@ func describeSubfile(imgfile disk.BlockReader, entry *img.FileEntry, clusterbloc
         }
     }
 
+    if hdr.Format == "TRE" {
+        mapId, err := img.ReadTreMapId(data[:])
+        if err == nil {
+            fmt.Printf("               > MapId %d (0x%[1]X)\n", mapId)
+        }
+    }
+
     return nil
 }
