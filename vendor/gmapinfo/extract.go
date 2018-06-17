@@ -35,12 +35,16 @@ func extractFiles(imgfile disk.BlockReader, clusterblocks uint32, files []img.Fi
             return err
         }
 
+        progressFunc := func(current, total int) {
+            progress := (current + 1) * 100 / total
+            fmt.Printf("Writing %s .. %d%%\r", name, progress)
+            os.Stdout.Sync()
+        }
+
         size := int64(entry.Size)
         nclusters := len(entry.FAT)
         for i, cluster := range entry.FAT {
-            progress := (i + 1) * 100 / nclusters
-            fmt.Printf("Writing %s .. %d%%\r", name, progress)
-            os.Stdout.Sync()
+            progressFunc(i, nclusters)
             data, err := imgfile.ReadBlocks(int64(cluster)*int64(clusterblocks), int64(clusterblocks))
             if err != nil {
                 return err
