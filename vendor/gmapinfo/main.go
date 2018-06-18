@@ -46,8 +46,17 @@ func Run(params Params) error {
 
     fmt.Printf("_FTabOffset:  0x%X (%d blocks)\n", hdr.FileTableBlock*hdr.BlockSize, hdr.FileTableBlock)
 
-    partSize := SizeFromBlockCount(hdr.PartitionTable[0].NumSectors, disk.BlockSize, hdr.ClusterBlocks)
-    fmt.Printf("_Partition 0: %v\n", partSize)
+    for i := range hdr.PartitionTable {
+        part := &hdr.PartitionTable[i]
+        if !part.Empty {
+            partSize := SizeFromBlockCount(part.NumSectors, disk.BlockSize, hdr.ClusterBlocks)
+            fmt.Printf("_Partition %d: %v\n", i, partSize)
+        } else {
+            if i == 0 {
+                fmt.Println("!! Partition 0 empty - bad image file?")
+            }
+        }
+    }
 
     fileSize := SizeFromByteCount(imgfile.SizeBytes(), hdr.BlockSize, hdr.ClusterSize)
     fmt.Printf("_File size:   %v\n", fileSize)
