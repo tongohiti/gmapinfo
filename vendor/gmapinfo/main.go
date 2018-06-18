@@ -53,24 +53,9 @@ func Run(params Params) error {
     fmt.Printf("_File size:   %v\n", fileSize)
 
     // Read zero pages between header and file table
-    nonzero := false
-    for i := int64(1); i < int64(hdr.FileTableBlock); i++ {
-        zeroes, err := imgfile.ReadBlock(i)
-        if err != nil {
-            return err
-        }
-        for _, z := range zeroes {
-            if z != 0 {
-                nonzero = true
-                break
-            }
-        }
-        if nonzero {
-            break
-        }
-    }
-    if nonzero {
-        fmt.Println("!! Non-zero data between image header and FAT - bad image file?")
+    allzeroes, err := readZeroes(imgfile, hdr.FileTableBlock)
+    if err != nil {
+        return err
     }
 
     // Read first (fake) file entry
@@ -88,7 +73,10 @@ func Run(params Params) error {
     fmt.Printf("_Header size: %v\n", headerSize)
 
     if firstentry.Size < hdr.FileTableBlock*hdr.BlockSize {
-        fmt.Println("!! Too small data size in first entry - bad image file?")
+        fmt.Println("!! Insufficient data size specified in first entry - bad image file?")
+    }
+    if !allzeroes {
+        fmt.Println("!! Non-zero data between img file header and FAT - bad image file?")
     }
 
     fatblocks := firstentry.Size/hdr.BlockSize - hdr.FileTableBlock
@@ -186,6 +174,21 @@ func SizeFromByteCount(bytes int64, blockSize, clusterSize uint32) *SizeDescript
     size.ClusterRem = int32(bytes % int64(clusterSize))
 
     return &size
+}
+
+func readZeroes(imgfile disk.BlockReader, fileTableBlock uint32) (ok bool, err error) {
+    for i := int64(1); i < int64(fileTableBlock); i++ {
+        zeroes, err := imgfile.ReadBlock(i)
+        if err != nil {
+            return false, err
+        }
+        for _, z := range zeroes {
+            if z != 0 {
+                return false, nil
+            }
+        }
+    }
+    return true, nil
 }
 
 type SubfileDescription struct {
