@@ -8,9 +8,11 @@ import (
 )
 
 func main() {
-    fmt.Println("gmapinfo 0.0.3")
+    fmt.Println("gmapinfo 0.1.0")
 
     var params gmapinfo.Params
+    flag.BoolVar(&params.ShowDetails, "t", false, "show more technical details")
+    flag.BoolVar(&params.ShowSubfiles, "s", false, "show subfiles details")
     flag.BoolVar(&params.Extract, "x", false, "extract subfiles")
     flag.BoolVar(&params.ZipOutput, "z", false, "pack extracted subfiles to zip file")
     flag.Parse()

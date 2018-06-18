@@ -6,11 +6,14 @@ import (
     "img"
 )
 
+// Mode of operation
 type Params struct {
-    FileName   string
-    Extract    bool
-    ZipOutput  bool
-    OutputName string
+    FileName     string // Input file (".img")
+    Extract      bool   // Extract files?
+    ZipOutput    bool   // Extract to ZIP archive instead of plain directory
+    OutputName   string // Output directory or archive name
+    ShowDetails  bool   // Print technical details (not interesting to an average user)
+    ShowSubfiles bool   // Print detailed subfiles information
 }
 
 func Run(params Params) error {
@@ -32,7 +35,11 @@ func Run(params Params) error {
         return err
     }
 
-    describeImageFile(imagefile, imgfile.SizeBytes(), hdr)
+    describeImageFile(imagefile, hdr)
+
+    if params.ShowDetails {
+        describeImageFileDetails(imgfile.SizeBytes(), hdr)
+    }
 
     // Read zero pages between header and file table
     allzeroes, err := readZeroes(imgfile, hdr.FileTableBlock)
@@ -53,7 +60,9 @@ func Run(params Params) error {
 
     fatblocks := firstentry.Size/hdr.BlockSize - hdr.FileTableBlock
 
-    describeImageFileHeader(hdr, firstentry, fatblocks, !allzeroes)
+    if params.ShowDetails {
+        describeImageFileHeader(hdr, firstentry, fatblocks, !allzeroes)
+    }
 
     // Check that block size is actually 512 bytes, otherwise further code would read incorect blocks
     if hdr.BlockSize != disk.BlockSize {
@@ -71,7 +80,9 @@ func Run(params Params) error {
         return err
     }
 
-    describeSubfiles(imgfile, hdr, files)
+    if params.ShowSubfiles {
+        describeSubfiles(imgfile, hdr, files)
+    }
 
     if params.Extract {
         err := extractFiles(imgfile, hdr.ClusterBlocks, files, params.OutputName, params.ZipOutput)
@@ -83,18 +94,19 @@ func Run(params Params) error {
     return nil
 }
 
-func describeImageFile(imageFileName string, imageFileSize int64, hdr *img.Header) {
+func describeImageFile(imageFileName string, hdr *img.Header) {
     fmt.Printf("Image file:   %s\n", imageFileName)
     fmt.Printf("Map name:     %s\n", hdr.MapName)
     fmt.Printf("Map version:  %v\n", hdr.MapVersion)
     fmt.Printf("Map date:     %v\n", hdr.MapDate)
     fmt.Printf("Timestamp:    %v\n", hdr.CreateDate)
+}
 
+func describeImageFileDetails(imageFileSize int64, hdr *img.Header) {
     fmt.Printf("_BlockSize:   %d\n", hdr.BlockSize)
     fmt.Printf("_ClustBlks:   %d\n", hdr.ClusterBlocks)
     fmt.Printf("_ClustSize:   %d\n", hdr.ClusterSize)
     fmt.Printf("_NumClust:    %d\n", hdr.NumClusters)
-
     fmt.Printf("_FTabOffset:  0x%X (%d blocks)\n", hdr.FileTableBlock*hdr.BlockSize, hdr.FileTableBlock)
 
     for i := range hdr.PartitionTable {
@@ -129,6 +141,7 @@ func describeImageFileHeader(hdr *img.Header, firstEntry *img.FileEntry, fatBloc
 }
 
 func describeSubfiles(imgfile disk.BlockReader, hdr *img.Header, files []img.FileEntry) error {
+    fmt.Println()
     fmt.Println("Subfiles:")
 
     printFunc := func(descr *SubfileDescription) {
