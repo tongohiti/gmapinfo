@@ -123,7 +123,6 @@ func Run(params Params) error {
 
     for i := range files {
         entry := &files[i]
-        fmt.Printf("Entry[%04d]: %v\n", i, *entry)
         err := describeSubfile(imgfile, entry, hdr.ClusterBlocks)
         if err != nil {
             return err
@@ -152,15 +151,24 @@ func describeSubfile(imgfile disk.BlockReader, entry *img.FileEntry, clusterbloc
     }
 
     hdr, err := img.DecodeSubfileCommonHeader(data[:])
-    if err == img.ErrBadSignature {
-        fmt.Println("             Not a GARMIN common format.")
-        return nil
-    }
-    if err != nil {
+    missingCommonHeader := err == img.ErrBadSignature
+    if err != nil && !missingCommonHeader {
         return err
     }
 
-    fmt.Printf("             %v\n", *hdr)
+    if missingCommonHeader {
+        fmt.Printf("  > %s, %d bytes\n", entry.Name, entry.Size)
+        return nil
+    } else {
+        fmt.Printf("  > %s, %d bytes, %v, locked=%t\n", entry.Name, entry.Size, hdr.CreateDate, hdr.Locked)
+    }
+
+    if hdr.Format == "TRE" {
+        mapId, err := img.ReadTreMapId(data[:])
+        if err == nil {
+            fmt.Printf("    > MapId %d (0x%[1]X)\n", mapId)
+        }
+    }
 
     if hdr.Format == "GMP" {
         gmpdirectory, err := img.ReadGmpDirectory(imgfile, entry, clusterblocks)
@@ -168,20 +176,13 @@ func describeSubfile(imgfile disk.BlockReader, entry *img.FileEntry, clusterbloc
             return err
         }
         for _, e := range gmpdirectory {
-            fmt.Printf("               > %s, %d bytes, %v\n", e.Format, e.Length, e.SubfileHeader)
+            fmt.Printf("    > %s, %d bytes, %v, locked=%t\n", e.Format, e.Length, e.SubfileHeader.CreateDate, e.SubfileHeader.Locked)
             if e.Format == "TRE" {
                 mapId, err := img.ReadTreMapId(e.RawHeader)
                 if err == nil {
-                    fmt.Printf("                 > MapId %d (0x%[1]X)\n", mapId)
+                    fmt.Printf("      > MapId %d (0x%[1]X)\n", mapId)
                 }
             }
-        }
-    }
-
-    if hdr.Format == "TRE" {
-        mapId, err := img.ReadTreMapId(data[:])
-        if err == nil {
-            fmt.Printf("               > MapId %d (0x%[1]X)\n", mapId)
         }
     }
 
