@@ -4,6 +4,7 @@ import (
     "fmt"
     "flag"
     "os"
+    "path/filepath"
     "gmapinfo"
 )
 
@@ -15,12 +16,13 @@ func main() {
     flag.BoolVar(&params.ShowSubfiles, "s", false, "show subfiles details")
     flag.BoolVar(&params.Extract, "x", false, "extract subfiles")
     flag.BoolVar(&params.ZipOutput, "z", false, "pack extracted subfiles to zip file")
+    flag.Usage = usage
     flag.Parse()
     argc := len(flag.Args())
     ok := (argc == 1 && !params.Extract) || (argc == 2 && params.Extract)
     if !ok {
         os.Stdout.Sync()
-        fmt.Fprintln(os.Stderr, "Bad arguments:", flag.Args())
+        fmt.Fprintln(os.Stderr, "Bad arguments")
         flag.Usage()
         os.Exit(2)
     }
@@ -35,4 +37,10 @@ func main() {
         fmt.Fprintln(os.Stderr, "Error:", err.Error())
         os.Exit(1)
     }
+}
+
+func usage() {
+    name := filepath.Base(os.Args[0])
+    fmt.Fprintf(flag.CommandLine.Output(), "Usage: %s [flags] <img-file> [<output-file>]\n", name)
+    flag.PrintDefaults()
 }
