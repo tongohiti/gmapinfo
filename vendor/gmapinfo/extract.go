@@ -14,18 +14,21 @@ import (
 var ErrExtract = errors.New("extract error")
 
 func extractFiles(imgfile disk.BlockReader, clusterblocks uint32, files []img.FileEntry, outname string, zipout bool) error {
-    if !zipout {
-        return ErrExtract
+    var dest FileWriter
+
+    if zipout {
+        f, e := os.Create(outname)
+        if e != nil {
+            return e
+        }
+        defer f.Close()
+
+        dest = zip.NewWriter(f)
+    } else {
+        dest = newDirectoryWriter(outname)
     }
 
-    f, e := os.Create(outname)
-    if e != nil {
-        return e
-    }
-    defer f.Close()
-
-    z := zip.NewWriter(f)
-    defer z.Close()
+    defer dest.Close()
 
     clustersize := int64(clusterblocks) * disk.BlockSize
     for i := range files {
@@ -41,13 +44,16 @@ func extractFiles(imgfile disk.BlockReader, clusterblocks uint32, files []img.Fi
             }
             for _, e := range gmpdirectory {
                 subname := name + "/" + name[:len(name)-4] + "." + e.Format
-                err = saveSubfile(subname, int64(e.Offset), int64(e.Length), entry.FAT, clustersize, int64(clusterblocks), imgfile, z)
+                err = saveSubfile(subname, int64(e.Offset), int64(e.Length), entry.FAT, clustersize, int64(clusterblocks), imgfile, dest)
                 if err != nil {
                     break
                 }
             }
+            if err != nil {
+                return err
+            }
         } else {
-            err = saveSubfile(name, 0, int64(entry.Size), entry.FAT, clustersize, int64(clusterblocks), imgfile, z)
+            err = saveSubfile(name, 0, int64(entry.Size), entry.FAT, clustersize, int64(clusterblocks), imgfile, dest)
         }
         if err != nil {
             return err
@@ -59,8 +65,8 @@ func extractFiles(imgfile disk.BlockReader, clusterblocks uint32, files []img.Fi
 
 type progressFunc func(current, total int)
 
-func saveSubfile(name string, offset, size int64, fat []uint16, clustersize, clusterblocks int64, imgfile disk.BlockReader, zw *zip.Writer) error {
-    ze, err := zw.Create(name)
+func saveSubfile(name string, offset, size int64, fat []uint16, clustersize, clusterblocks int64, imgfile disk.BlockReader, dest FileWriter) error {
+    ze, err := dest.Create(name)
     if err != nil {
         return err
     }
