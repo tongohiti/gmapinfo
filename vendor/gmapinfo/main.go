@@ -46,22 +46,18 @@ func Run(params Params) error {
 
     fmt.Printf("_FTabOffset:  0x%X (%d blocks)\n", hdr.FileTableBlock*hdr.BlockSize, hdr.FileTableBlock)
 
-    partSectors := hdr.PartitionTable[0].NumSectors
-    partBytes := partSectors * 512
-    partClusters := partSectors / hdr.ClusterBlocks
-    fmt.Printf("_Partition 0: %d bytes, %d blocks, %d clusters\n", partBytes, partSectors, partClusters)
-    if partSectors%hdr.ClusterBlocks != 0 {
+    partSize := SizeFromBlockCount(hdr.PartitionTable[0].NumSectors, disk.BlockSize, hdr.ClusterBlocks)
+    fmt.Printf("_Partition 0: %d bytes, %d blocks, %d clusters\n", partSize.Bytes, partSize.Blocks, partSize.Clusters)
+    if partSize.ClusterRem != 0 {
         fmt.Println("!! Non-whole number of clusters in partition - bad image file?")
     }
 
-    bytes := imgfile.SizeBytes()
-    blocks, clusters := bytes/int64(hdr.BlockSize), bytes/int64(hdr.ClusterSize)
-    fmt.Printf("_File size:   %d bytes, %d blocks, %d clusters\n", bytes, blocks, clusters)
-    xblocks, xclusters := bytes%int64(hdr.BlockSize), bytes%int64(hdr.ClusterSize)
-    if xblocks != 0 {
+    fileSize := SizeFromByteCount(imgfile.SizeBytes(), hdr.BlockSize, hdr.ClusterSize)
+    fmt.Printf("_File size:   %d bytes, %d blocks, %d clusters\n", fileSize.Bytes, fileSize.Blocks, fileSize.Clusters)
+    if fileSize.BlockRem != 0 {
         fmt.Println("!! Non-whole number of blocks - bad image file?")
     }
-    if xclusters != 0 {
+    if fileSize.ClusterRem != 0 {
         fmt.Println("!! Non-whole number of clusters - bad image file?")
     }
 
@@ -97,9 +93,13 @@ func Run(params Params) error {
         return err
     }
 
-    fmt.Printf("_Header size: %d bytes\n", firstentry.Size)
-    if firstentry.Size%hdr.BlockSize != 0 {
+    headerSize := SizeFromByteCount(int64(firstentry.Size), hdr.BlockSize, hdr.ClusterSize)
+    fmt.Printf("_Header size: %d bytes, %d blocks, %d clusters\n", headerSize.Bytes, headerSize.Blocks, headerSize.Clusters)
+    if headerSize.BlockRem != 0 {
         fmt.Println("!! Non-whole number of blocks in first entry - bad image file?")
+    }
+    if headerSize.ClusterRem != 0 {
+        fmt.Println("!! Non-whole number of clusters in first entry - bad image file?")
     }
     if firstentry.Size < hdr.FileTableBlock*hdr.BlockSize {
         fmt.Println("!! Too small data size in first entry - bad image file?")
@@ -160,6 +160,37 @@ func Run(params Params) error {
     }
 
     return nil
+}
+
+type SizeDescription struct {
+    Bytes      int64
+    Blocks     int64
+    Clusters   int64
+    BlockRem   int32
+    ClusterRem int32
+}
+
+func SizeFromBlockCount(blocks, blockSize, blocksInCluster uint32) *SizeDescription {
+    var size SizeDescription
+
+    size.Blocks = int64(blocks)
+    size.Bytes = int64(blocks) * int64(blockSize)
+    size.Clusters = int64(blocks) / int64(blocksInCluster)
+    size.ClusterRem = int32(blocks % blocksInCluster)
+
+    return &size
+}
+
+func SizeFromByteCount(bytes int64, blockSize, clusterSize uint32) *SizeDescription {
+    var size SizeDescription
+
+    size.Bytes = bytes
+    size.Blocks = bytes / int64(blockSize)
+    size.Clusters = bytes / int64(clusterSize)
+    size.BlockRem = int32(bytes % int64(blockSize))
+    size.ClusterRem = int32(bytes % int64(clusterSize))
+
+    return &size
 }
 
 type SubfileDescription struct {
