@@ -15,8 +15,6 @@ type Params struct {
 
 func Run(params Params) error {
     imagefile := params.FileName
-    fmt.Printf("Image file:   %s\n", imagefile)
-
     imgfile, err := disk.OpenImageFile(imagefile)
     if err != nil {
         return err
@@ -34,6 +32,59 @@ func Run(params Params) error {
         return err
     }
 
+    describeImageFile(imagefile, imgfile.SizeBytes(), hdr)
+
+    // Read zero pages between header and file table
+    allzeroes, err := readZeroes(imgfile, hdr.FileTableBlock)
+    if err != nil {
+        return err
+    }
+
+    // Read first (fake) file entry
+    firstentryblk, err := imgfile.ReadBlock(int64(hdr.FileTableBlock))
+    if err != nil {
+        return err
+    }
+
+    firstentry, err := img.DecodeFileEntry(firstentryblk[:])
+    if err != nil {
+        return err
+    }
+
+    fatblocks := firstentry.Size/hdr.BlockSize - hdr.FileTableBlock
+
+    describeImageFileHeader(hdr, firstentry, fatblocks, !allzeroes)
+
+    // Check that block size is actually 512 bytes, otherwise further code would read incorect blocks
+    if hdr.BlockSize != disk.BlockSize {
+        return fmt.Errorf("unsupported block size: %d", hdr.BlockSize) // if encountered (unlikely), need to rework BlockReader
+    }
+
+    // Read whole file table
+    filetable, err := imgfile.ReadBlocks(int64(hdr.FileTableBlock)+1, int64(fatblocks)-1)
+    if err != nil {
+        return err
+    }
+
+    files, err := img.DecodeFileTable(filetable)
+    if err != nil {
+        return err
+    }
+
+    describeSubfiles(imgfile, hdr, files)
+
+    if params.Extract {
+        err := extractFiles(imgfile, hdr.ClusterBlocks, files, params.OutputName, params.ZipOutput)
+        if err != nil {
+            return err
+        }
+    }
+
+    return nil
+}
+
+func describeImageFile(imageFileName string, imageFileSize int64, hdr *img.Header) {
+    fmt.Printf("Image file:   %s\n", imageFileName)
     fmt.Printf("Map name:     %s\n", hdr.MapName)
     fmt.Printf("Map version:  %v\n", hdr.MapVersion)
     fmt.Printf("Map date:     %v\n", hdr.MapDate)
@@ -58,57 +109,27 @@ func Run(params Params) error {
         }
     }
 
-    fileSize := SizeFromByteCount(imgfile.SizeBytes(), hdr.BlockSize, hdr.ClusterSize)
+    fileSize := SizeFromByteCount(imageFileSize, hdr.BlockSize, hdr.ClusterSize)
     fmt.Printf("_File size:   %v\n", fileSize)
+}
 
-    // Read zero pages between header and file table
-    allzeroes, err := readZeroes(imgfile, hdr.FileTableBlock)
-    if err != nil {
-        return err
-    }
-
-    // Read first (fake) file entry
-    firstentryblk, err := imgfile.ReadBlock(int64(hdr.FileTableBlock))
-    if err != nil {
-        return err
-    }
-
-    firstentry, err := img.DecodeFileEntry(firstentryblk[:])
-    if err != nil {
-        return err
-    }
-
-    headerSize := SizeFromByteCount(int64(firstentry.Size), hdr.BlockSize, hdr.ClusterSize)
+func describeImageFileHeader(hdr *img.Header, firstEntry *img.FileEntry, fatBlocks uint32, unparsedHeaderData bool) {
+    headerSize := SizeFromByteCount(int64(firstEntry.Size), hdr.BlockSize, hdr.ClusterSize)
     fmt.Printf("_Header size: %v\n", headerSize)
 
-    if firstentry.Size < hdr.FileTableBlock*hdr.BlockSize {
+    if firstEntry.Size < hdr.FileTableBlock*hdr.BlockSize {
         fmt.Println("!! Insufficient data size specified in first entry - bad image file?")
     }
-    if !allzeroes {
+    if unparsedHeaderData {
         fmt.Println("!! Non-zero data between img file header and FAT - bad image file?")
     }
 
-    fatblocks := firstentry.Size/hdr.BlockSize - hdr.FileTableBlock
-    fmt.Printf("_Data start:  0x%X\n", firstentry.Size)
-    fmt.Printf("_Num entries: %d (0x%[1]X)\n", fatblocks)
+    fmt.Printf("_Data start:  0x%X\n", firstEntry.Size)
+    fmt.Printf("_Num entries: %d (0x%[1]X)\n", fatBlocks)
+}
 
-    // Check that block size is actually 512 bytes, otherwise further code would read incorect blocks
-    if hdr.BlockSize != disk.BlockSize {
-        return fmt.Errorf("unsupported block size: %d", hdr.BlockSize) // if encountered (unlikely), need to rework BlockReader
-    }
-
-    // Read whole file table
-    filetable, err := imgfile.ReadBlocks(int64(hdr.FileTableBlock)+1, int64(fatblocks)-1)
-    if err != nil {
-        return err
-    }
-
-    files, err := img.DecodeFileTable(filetable)
-    if err != nil {
-        return err
-    }
-
-    fmt.Printf("_Num files:   %d (0x%[1]X)\n", len(files))
+func describeSubfiles(imgfile disk.BlockReader, hdr *img.Header, files []img.FileEntry) error {
+    fmt.Println("Subfiles:")
 
     printFunc := func(descr *SubfileDescription) {
         var prefix string
@@ -137,68 +158,7 @@ func Run(params Params) error {
 
     fmt.Printf("Total %d subfiles.\n", len(files))
 
-    if params.Extract {
-        err := extractFiles(imgfile, hdr.ClusterBlocks, files, params.OutputName, params.ZipOutput)
-        if err != nil {
-            return err
-        }
-    }
-
     return nil
-}
-
-type SizeDescription struct {
-    Bytes      int64
-    Blocks     int64
-    Clusters   int64
-    BlockRem   int32
-    ClusterRem int32
-}
-
-func (sz *SizeDescription) String() string {
-    if sz.BlockRem == 0 && sz.ClusterRem == 0 {
-        return fmt.Sprintf("%d bytes, %d blocks, %d clusters", sz.Bytes, sz.Blocks, sz.Clusters)
-    } else { // Broken image file?
-        return fmt.Sprintf("%d bytes, %d blocks (+%d bytes), %d clusters (+%d bytes) !! bad image file?", sz.Bytes, sz.Blocks, sz.BlockRem, sz.Clusters, sz.ClusterRem)
-    }
-}
-
-func SizeFromBlockCount(blocks, blockSize, blocksInCluster uint32) *SizeDescription {
-    var size SizeDescription
-
-    size.Blocks = int64(blocks)
-    size.Bytes = int64(blocks) * int64(blockSize)
-    size.Clusters = int64(blocks) / int64(blocksInCluster)
-    size.ClusterRem = int32(blocks%blocksInCluster) * int32(blockSize)
-
-    return &size
-}
-
-func SizeFromByteCount(bytes int64, blockSize, clusterSize uint32) *SizeDescription {
-    var size SizeDescription
-
-    size.Bytes = bytes
-    size.Blocks = bytes / int64(blockSize)
-    size.Clusters = bytes / int64(clusterSize)
-    size.BlockRem = int32(bytes % int64(blockSize))
-    size.ClusterRem = int32(bytes % int64(clusterSize))
-
-    return &size
-}
-
-func readZeroes(imgfile disk.BlockReader, fileTableBlock uint32) (ok bool, err error) {
-    for i := int64(1); i < int64(fileTableBlock); i++ {
-        zeroes, err := imgfile.ReadBlock(i)
-        if err != nil {
-            return false, err
-        }
-        for _, z := range zeroes {
-            if z != 0 {
-                return false, nil
-            }
-        }
-    }
-    return true, nil
 }
 
 type SubfileDescription struct {
