@@ -49,7 +49,7 @@ func Run(params Params) error {
     for i := range hdr.PartitionTable {
         part := &hdr.PartitionTable[i]
         if !part.Empty {
-            partSize := SizeFromBlockCount(part.NumSectors, disk.BlockSize, hdr.ClusterBlocks)
+            partSize := SizeFromBlockCount(part.NumSectors, hdr.BlockSize, hdr.ClusterBlocks)
             fmt.Printf("_Partition %d: %v\n", i, partSize)
         } else {
             if i == 0 {
@@ -92,6 +92,11 @@ func Run(params Params) error {
     fmt.Printf("_Data start:  0x%X\n", firstentry.Size)
     fmt.Printf("_Num entries: %d (0x%[1]X)\n", fatblocks)
 
+    // Check that block size is actually 512 bytes, otherwise further code would read incorect blocks
+    if hdr.BlockSize != disk.BlockSize {
+        return fmt.Errorf("unsupported block size: %d", hdr.BlockSize) // if encountered (unlikely), need to rework BlockReader
+    }
+
     // Read whole file table
     filetable, err := imgfile.ReadBlocks(int64(hdr.FileTableBlock)+1, int64(fatblocks)-1)
     if err != nil {
@@ -133,10 +138,6 @@ func Run(params Params) error {
     fmt.Printf("Total %d subfiles.\n", len(files))
 
     if params.Extract {
-        if hdr.BlockSize != disk.BlockSize {
-            return fmt.Errorf("unsupported block size: %d", hdr.BlockSize)
-        }
-
         err := extractFiles(imgfile, hdr.ClusterBlocks, files, params.OutputName, params.ZipOutput)
         if err != nil {
             return err
@@ -168,7 +169,7 @@ func SizeFromBlockCount(blocks, blockSize, blocksInCluster uint32) *SizeDescript
     size.Blocks = int64(blocks)
     size.Bytes = int64(blocks) * int64(blockSize)
     size.Clusters = int64(blocks) / int64(blocksInCluster)
-    size.ClusterRem = int32(blocks % blocksInCluster) * int32(blockSize)
+    size.ClusterRem = int32(blocks%blocksInCluster) * int32(blockSize)
 
     return &size
 }
