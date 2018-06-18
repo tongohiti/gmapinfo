@@ -13,7 +13,17 @@ import (
 
 var ErrExtract = errors.New("extract error")
 
-func extractFiles(imgfile disk.BlockReader, clusterblocks uint32, files []img.FileEntry, outname string, zipout bool) error {
+func extractFiles(imgfile disk.BlockReader, clusterblocks uint32, files []img.FileEntry, outname string, zipout bool, overwrite bool) error {
+    if !overwrite {
+        _, err := os.Stat(outname)
+        if err != nil && !os.IsNotExist(err) {
+            return err
+        }
+        if err == nil {
+            return os.ErrExist
+        }
+    }
+
     var dest FileWriter
 
     if zipout {
@@ -29,6 +39,8 @@ func extractFiles(imgfile disk.BlockReader, clusterblocks uint32, files []img.Fi
     }
 
     defer dest.Close()
+
+    fmt.Println()
 
     clustersize := int64(clusterblocks) * disk.BlockSize
     for i := range files {
@@ -59,6 +71,8 @@ func extractFiles(imgfile disk.BlockReader, clusterblocks uint32, files []img.Fi
             return err
         }
     }
+
+    fmt.Println("Done.")
 
     return nil
 }

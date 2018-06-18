@@ -16,6 +16,7 @@ func main() {
     flag.BoolVar(&params.ShowSubfiles, "s", false, "show subfiles details")
     flag.BoolVar(&params.Extract, "x", false, "extract subfiles")
     flag.BoolVar(&params.ZipOutput, "z", false, "pack extracted subfiles to zip file")
+    flag.BoolVar(&params.ForceOverwrite, "f", false, "overwrite existing files if necessary")
     flag.Usage = usage
     flag.Parse()
     argc := len(flag.Args())

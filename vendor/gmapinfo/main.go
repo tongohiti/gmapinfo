@@ -10,12 +10,13 @@ import (
 
 // Mode of operation
 type Params struct {
-    FileName     string // Input file (".img")
-    Extract      bool   // Extract files?
-    ZipOutput    bool   // Extract to ZIP archive instead of plain directory
-    OutputName   string // Output directory or archive name
-    ShowDetails  bool   // Print technical details (not interesting to an average user)
-    ShowSubfiles bool   // Print detailed subfiles information
+    FileName       string // Input file (".img")
+    Extract        bool   // Extract files?
+    ZipOutput      bool   // Extract to ZIP archive instead of plain directory
+    OutputName     string // Output directory or archive name
+    ForceOverwrite bool   // Overwrite existing files
+    ShowDetails    bool   // Print technical details (not interesting to an average user)
+    ShowSubfiles   bool   // Print detailed subfiles information
 }
 
 func Run(params Params) error {
@@ -87,7 +88,7 @@ func Run(params Params) error {
     }
 
     if params.Extract {
-        err := extractFiles(imgfile, hdr.ClusterBlocks, files, params.OutputName, params.ZipOutput)
+        err := extractFiles(imgfile, hdr.ClusterBlocks, files, params.OutputName, params.ZipOutput, params.ForceOverwrite)
         if err != nil {
             return err
         }
