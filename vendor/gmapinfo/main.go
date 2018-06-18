@@ -121,9 +121,26 @@ func Run(params Params) error {
 
     fmt.Printf("Num files:   %d (0x%[1]X)\n", len(files))
 
+    printFunc := func(descr *SubfileDescription) {
+        var prefix string
+        if descr.Nested {
+            prefix = "    >>"
+        } else {
+            prefix = "  >"
+        }
+        fmt.Printf("%s %s, %d bytes", prefix, descr.Name, descr.Size)
+        if descr.Attrs {
+            fmt.Printf(", %v, locked=%t", descr.Date, descr.Locked)
+        }
+        if descr.MapId != 0 {
+            fmt.Printf(", MapID %d (0x%[1]X)", descr.MapId)
+        }
+        fmt.Println()
+    }
+
     for i := range files {
         entry := &files[i]
-        err := describeSubfile(imgfile, entry, hdr.ClusterBlocks)
+        err := describeSubfile(imgfile, entry, hdr.ClusterBlocks, printFunc)
         if err != nil {
             return err
         }
@@ -143,7 +160,19 @@ func Run(params Params) error {
     return nil
 }
 
-func describeSubfile(imgfile disk.BlockReader, entry *img.FileEntry, clusterblocks uint32) error {
+type SubfileDescription struct {
+    Name   string
+    Size   uint32
+    Date   img.Timestamp
+    MapId  uint32
+    Attrs  bool
+    Locked bool
+    Nested bool
+}
+
+type PrintFunc func(*SubfileDescription)
+
+func describeSubfile(imgfile disk.BlockReader, entry *img.FileEntry, clusterblocks uint32, print PrintFunc) error {
     firstblock := int64(entry.FAT[0]) * int64(clusterblocks)
     data, err := imgfile.ReadBlock(firstblock)
     if err != nil {
@@ -156,33 +185,52 @@ func describeSubfile(imgfile disk.BlockReader, entry *img.FileEntry, clusterbloc
         return err
     }
 
+    var descr SubfileDescription
+    descr.Name = entry.Name
+    descr.Size = entry.Size
+
     if missingCommonHeader {
-        fmt.Printf("  > %s, %d bytes\n", entry.Name, entry.Size)
+        descr.Attrs = false
+        print(&descr)
         return nil
     } else {
-        fmt.Printf("  > %s, %d bytes, %v, locked=%t\n", entry.Name, entry.Size, hdr.CreateDate, hdr.Locked)
+        descr.Attrs = true
+        descr.Date = hdr.CreateDate
+        descr.Locked = hdr.Locked
     }
 
     if hdr.Format == "TRE" {
         mapId, err := img.ReadTreMapId(data[:])
         if err == nil {
-            fmt.Printf("    > MapId %d (0x%[1]X)\n", mapId)
+            descr.MapId = mapId
         }
     }
+
+    print(&descr)
 
     if hdr.Format == "GMP" {
         gmpdirectory, err := img.ReadGmpDirectory(imgfile, entry, clusterblocks)
         if err != nil {
             return err
         }
+
         for _, e := range gmpdirectory {
-            fmt.Printf("    > %s, %d bytes, %v, locked=%t\n", e.Format, e.Length, e.SubfileHeader.CreateDate, e.SubfileHeader.Locked)
+            var descr SubfileDescription
+            descr.Nested = true
+            descr.Attrs = true
+            descr.Name = e.Format
+            descr.Size = e.Length
+            descr.Date = e.SubfileHeader.CreateDate
+            descr.Locked = e.SubfileHeader.Locked
+
             if e.Format == "TRE" {
                 mapId, err := img.ReadTreMapId(e.RawHeader)
                 if err == nil {
-                    fmt.Printf("      > MapId %d (0x%[1]X)\n", mapId)
+                    descr.MapId = mapId
                 }
             }
+
+            print(&descr)
         }
     }
 
