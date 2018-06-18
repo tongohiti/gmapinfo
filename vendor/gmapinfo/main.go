@@ -47,19 +47,10 @@ func Run(params Params) error {
     fmt.Printf("_FTabOffset:  0x%X (%d blocks)\n", hdr.FileTableBlock*hdr.BlockSize, hdr.FileTableBlock)
 
     partSize := SizeFromBlockCount(hdr.PartitionTable[0].NumSectors, disk.BlockSize, hdr.ClusterBlocks)
-    fmt.Printf("_Partition 0: %d bytes, %d blocks, %d clusters\n", partSize.Bytes, partSize.Blocks, partSize.Clusters)
-    if partSize.ClusterRem != 0 {
-        fmt.Println("!! Non-whole number of clusters in partition - bad image file?")
-    }
+    fmt.Printf("_Partition 0: %v\n", partSize)
 
     fileSize := SizeFromByteCount(imgfile.SizeBytes(), hdr.BlockSize, hdr.ClusterSize)
-    fmt.Printf("_File size:   %d bytes, %d blocks, %d clusters\n", fileSize.Bytes, fileSize.Blocks, fileSize.Clusters)
-    if fileSize.BlockRem != 0 {
-        fmt.Println("!! Non-whole number of blocks - bad image file?")
-    }
-    if fileSize.ClusterRem != 0 {
-        fmt.Println("!! Non-whole number of clusters - bad image file?")
-    }
+    fmt.Printf("_File size:   %v\n", fileSize)
 
     // Read zero pages between header and file table
     nonzero := false
@@ -94,16 +85,12 @@ func Run(params Params) error {
     }
 
     headerSize := SizeFromByteCount(int64(firstentry.Size), hdr.BlockSize, hdr.ClusterSize)
-    fmt.Printf("_Header size: %d bytes, %d blocks, %d clusters\n", headerSize.Bytes, headerSize.Blocks, headerSize.Clusters)
-    if headerSize.BlockRem != 0 {
-        fmt.Println("!! Non-whole number of blocks in first entry - bad image file?")
-    }
-    if headerSize.ClusterRem != 0 {
-        fmt.Println("!! Non-whole number of clusters in first entry - bad image file?")
-    }
+    fmt.Printf("_Header size: %v\n", headerSize)
+
     if firstentry.Size < hdr.FileTableBlock*hdr.BlockSize {
         fmt.Println("!! Too small data size in first entry - bad image file?")
     }
+
     fatblocks := firstentry.Size/hdr.BlockSize - hdr.FileTableBlock
     fmt.Printf("_Data start:  0x%X\n", firstentry.Size)
     fmt.Printf("_Num entries: %d (0x%[1]X)\n", fatblocks)
@@ -170,13 +157,21 @@ type SizeDescription struct {
     ClusterRem int32
 }
 
+func (sz *SizeDescription) String() string {
+    if sz.BlockRem == 0 && sz.ClusterRem == 0 {
+        return fmt.Sprintf("%d bytes, %d blocks, %d clusters", sz.Bytes, sz.Blocks, sz.Clusters)
+    } else { // Broken image file?
+        return fmt.Sprintf("%d bytes, %d blocks (+%d bytes), %d clusters (+%d bytes) !! bad image file?", sz.Bytes, sz.Blocks, sz.BlockRem, sz.Clusters, sz.ClusterRem)
+    }
+}
+
 func SizeFromBlockCount(blocks, blockSize, blocksInCluster uint32) *SizeDescription {
     var size SizeDescription
 
     size.Blocks = int64(blocks)
     size.Bytes = int64(blocks) * int64(blockSize)
     size.Clusters = int64(blocks) / int64(blocksInCluster)
-    size.ClusterRem = int32(blocks % blocksInCluster)
+    size.ClusterRem = int32(blocks % blocksInCluster) * int32(blockSize)
 
     return &size
 }
