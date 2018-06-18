@@ -1,9 +1,11 @@
 package gmapinfo
 
 import (
-    "fmt"
     "disk"
     "img"
+    "fmt"
+    "text/tabwriter"
+    "os"
 )
 
 // Mode of operation
@@ -95,6 +97,8 @@ func Run(params Params) error {
 }
 
 func describeImageFile(imageFileName string, hdr *img.Header) {
+    fmt.Println()
+
     fmt.Printf("Image file:   %s\n", imageFileName)
     fmt.Printf("Map name:     %s\n", hdr.MapName)
     fmt.Printf("Map version:  %v\n", hdr.MapVersion)
@@ -103,17 +107,19 @@ func describeImageFile(imageFileName string, hdr *img.Header) {
 }
 
 func describeImageFileDetails(imageFileSize int64, hdr *img.Header) {
-    fmt.Printf("_BlockSize:   %d\n", hdr.BlockSize)
-    fmt.Printf("_ClustBlks:   %d\n", hdr.ClusterBlocks)
-    fmt.Printf("_ClustSize:   %d\n", hdr.ClusterSize)
-    fmt.Printf("_NumClust:    %d\n", hdr.NumClusters)
-    fmt.Printf("_FTabOffset:  0x%X (%d blocks)\n", hdr.FileTableBlock*hdr.BlockSize, hdr.FileTableBlock)
+    fmt.Println()
+
+    fmt.Printf("Block size:      %d\n", hdr.BlockSize)
+    fmt.Printf("Blocks/cluster:  %d\n", hdr.ClusterBlocks)
+    fmt.Printf("Cluster size:    %d\n", hdr.ClusterSize)
+    fmt.Printf("Num clusters:    %d\n", hdr.NumClusters)
+    fmt.Printf("File table offs: 0x%X (%d blocks)\n", hdr.FileTableBlock*hdr.BlockSize, hdr.FileTableBlock)
 
     for i := range hdr.PartitionTable {
         part := &hdr.PartitionTable[i]
         if !part.Empty {
             partSize := SizeFromBlockCount(part.NumSectors, hdr.BlockSize, hdr.ClusterBlocks)
-            fmt.Printf("_Partition %d: %v\n", i, partSize)
+            fmt.Printf("Partition %d:     %v\n", i, partSize)
         } else {
             if i == 0 {
                 fmt.Println("!! Partition 0 empty - bad image file?")
@@ -122,12 +128,12 @@ func describeImageFileDetails(imageFileSize int64, hdr *img.Header) {
     }
 
     fileSize := SizeFromByteCount(imageFileSize, hdr.BlockSize, hdr.ClusterSize)
-    fmt.Printf("_File size:   %v\n", fileSize)
+    fmt.Printf("Image file size: %v\n", fileSize)
 }
 
 func describeImageFileHeader(hdr *img.Header, firstEntry *img.FileEntry, fatBlocks uint32, unparsedHeaderData bool) {
     headerSize := SizeFromByteCount(int64(firstEntry.Size), hdr.BlockSize, hdr.ClusterSize)
-    fmt.Printf("_Header size: %v\n", headerSize)
+    fmt.Printf("Header size:     %v\n", headerSize)
 
     if firstEntry.Size < hdr.FileTableBlock*hdr.BlockSize {
         fmt.Println("!! Insufficient data size specified in first entry - bad image file?")
@@ -136,29 +142,41 @@ func describeImageFileHeader(hdr *img.Header, firstEntry *img.FileEntry, fatBloc
         fmt.Println("!! Non-zero data between img file header and FAT - bad image file?")
     }
 
-    fmt.Printf("_Data start:  0x%X\n", firstEntry.Size)
-    fmt.Printf("_Num entries: %d (0x%[1]X)\n", fatBlocks)
+    fmt.Printf("Data start:      0x%X\n", firstEntry.Size)
+    fmt.Printf("Num entries:     %d\n", fatBlocks)
 }
 
 func describeSubfiles(imgfile disk.BlockReader, hdr *img.Header, files []img.FileEntry) error {
     fmt.Println()
-    fmt.Println("Subfiles:")
+
+    tw := tabwriter.NewWriter(os.Stdout, 1, 4, 2, ' ', 0)
+    fmt.Fprintln(tw, "Name\tSize, bytes\tDate/time\tLocked?\tMap ID\t")
+    fmt.Fprintln(tw, "------------\t-----------\t-------------------\t-------\t--------\t")
 
     printFunc := func(descr *SubfileDescription) {
         var prefix string
         if descr.Nested {
-            prefix = "    >>"
+            prefix = "  |----- "
         } else {
-            prefix = "  >"
+            prefix = ""
         }
-        fmt.Printf("%s %s, %d bytes", prefix, descr.Name, descr.Size)
+        fmt.Fprintf(tw, "%s%s\t%11d", prefix, descr.Name, descr.Size)
         if descr.Attrs {
-            fmt.Printf(", %v, locked=%t", descr.Date, descr.Locked)
+            fmt.Fprintf(tw, "\t%v", descr.Date)
+            if descr.Locked {
+                fmt.Fprint(tw, "\tLOCKED")
+            } else {
+                fmt.Fprint(tw, "\t")
+            }
+        } else {
+            fmt.Fprint(tw, "\t\t")
         }
         if descr.MapId != 0 {
-            fmt.Printf(", MapID %d (0x%[1]X)", descr.MapId)
+            fmt.Fprintf(tw, "\t0x%X", descr.MapId)
+        } else {
+            fmt.Fprint(tw, "\t")
         }
-        fmt.Println()
+        fmt.Fprintln(tw, "\t")
     }
 
     for i := range files {
@@ -169,7 +187,8 @@ func describeSubfiles(imgfile disk.BlockReader, hdr *img.Header, files []img.Fil
         }
     }
 
-    fmt.Printf("Total %d subfiles.\n", len(files))
+    tw.Flush()
+    fmt.Printf("\nTotal %d subfiles.\n", len(files))
 
     return nil
 }
