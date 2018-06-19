@@ -58,7 +58,7 @@ type rawHeader struct {
     Exp1, Exp2     uint8           // 0x061, 0x062
     NumClusters    uint16          // 0x063 (unaligned!)
     MapDescr2      [30]byte        // 0x065
-    Dead           uint16          // 0x083
+    _              uint16          // 0x083
     Unk3           uint16          // 0x085
     Unk4           uint8           // 0x087
     _              [310]byte       // 0x088
@@ -97,10 +97,6 @@ func DecodeHeader(hdrbytes []byte) (*Header, error) {
 
     garmin := string(rawhdr.Garmin[:])
     if garmin != "GARMIN" {
-        return nil, ErrBadSignature
-    }
-
-    if rawhdr.Dead != 0xDEAD {
         return nil, ErrBadSignature
     }
 
