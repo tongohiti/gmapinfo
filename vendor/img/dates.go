@@ -21,7 +21,7 @@ func (t Timestamp) String() string {
 
 func convertDate(rawyear, rawmonth uint8) Date {
     var d Date
-    d.Month = int(rawmonth) + 1
+    d.Month = int(rawmonth)
     if rawyear >= 0x63 {
         d.Year = int(rawyear) + 1900
     } else {
@@ -33,7 +33,7 @@ func convertDate(rawyear, rawmonth uint8) Date {
 func convertTimestamp(rawyear uint16, rawmonth, rawday uint8, rawhour, rawminute, rawsecond uint8) Timestamp {
     var t Timestamp
     t.Year = int(rawyear)
-    t.Month = int(rawmonth) + 1
+    t.Month = int(rawmonth)
     t.Day = int(rawday)
     t.HH = int(rawhour)
     t.MM = int(rawminute)
