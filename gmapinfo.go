@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-    fmt.Println("gmapinfo 0.1.1")
+    fmt.Println("gmapinfo 1.0.0")
 
     var params gmapinfo.Params
     flag.BoolVar(&params.ShowDetails, "t", false, "show more technical details")
